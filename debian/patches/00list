@@ -1,3 +1,2 @@
-03_debian-targets.patch
-06_man-dir.patch
+debian-targets.patch
 0001-remove-pointless-ARM-instruction-probing.patch

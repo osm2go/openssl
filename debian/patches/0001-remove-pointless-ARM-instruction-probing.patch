@@ -20,10 +20,10 @@
 @DPATCH@
 
 diff --git a/crypto/armcap.c b/crypto/armcap.c
-index 356fa1528..84b1bca28 100644
+index 58e54f0..1ffd5ae 100644
 --- a/crypto/armcap.c
 +++ b/crypto/armcap.c
-@@ -32,17 +32,9 @@ static void ill_handler(int sig)
+@@ -42,20 +42,9 @@ static void ill_handler(int sig)
   * ARM compilers support inline assembler...
   */
  void _armv7_neon_probe(void);
@@ -31,9 +31,12 @@ index 356fa1528..84b1bca28 100644
 -void _armv8_sha1_probe(void);
 -void _armv8_sha256_probe(void);
 -void _armv8_pmull_probe(void);
--unsigned long _armv7_tick(void);
+-# ifdef __aarch64__
+-void _armv8_sha512_probe(void);
+-# endif
+-uint32_t _armv7_tick(void);
  
- unsigned long OPENSSL_rdtsc(void)
+ uint32_t OPENSSL_rdtsc(void)
  {
 -    if (OPENSSL_armcap_P & ARMV7_TICK)
 -        return _armv7_tick();
@@ -41,8 +44,8 @@ index 356fa1528..84b1bca28 100644
          return 0;
  }
  
-@@ -137,25 +129,6 @@ void OPENSSL_cpuid_setup(void)
-     } else if (sigsetjmp(ill_jmp, 1) == 0) {
+@@ -178,36 +167,9 @@ void OPENSSL_cpuid_setup(void)
+     if (sigsetjmp(ill_jmp, 1) == 0) {
          _armv7_neon_probe();
          OPENSSL_armcap_P |= ARMV7_NEON;
 -        if (sigsetjmp(ill_jmp, 1) == 0) {
@@ -60,58 +63,87 @@ index 356fa1528..84b1bca28 100644
 -            _armv8_sha256_probe();
 -            OPENSSL_armcap_P |= ARMV8_SHA256;
 -        }
--    }
+-#  if defined(__aarch64__) && !defined(__APPLE__)
+-        if (sigsetjmp(ill_jmp, 1) == 0) {
+-            _armv8_sha512_probe();
+-            OPENSSL_armcap_P |= ARMV8_SHA512;
+-        }
+-#  endif
+     }
+ # endif
+ 
+-    /* Things that getauxval didn't tell us */
 -    if (sigsetjmp(ill_jmp, 1) == 0) {
 -        _armv7_tick();
 -        OPENSSL_armcap_P |= ARMV7_TICK;
-     }
- 
+-    }
+-
      sigaction(SIGILL, &ill_oact, NULL);
-diff --git a/crypto/armv4cpuid.S b/crypto/armv4cpuid.S
-index 65010ae4fe..0c05ce5097 100644
---- a/crypto/armv4cpuid.S
-+++ b/crypto/armv4cpuid.S
-@@ -87,40 +87,6 @@ _armv7_neon_probe:
- 	vorr	q0,q0,q0
+     sigprocmask(SIG_SETMASK, &oset, NULL);
+ }
+diff --git a/crypto/armv4cpuid.pl b/crypto/armv4cpuid.pl
+index ab007c1..e56df3a 100644
+--- a/crypto/armv4cpuid.pl
++++ b/crypto/armv4cpuid.pl
+@@ -148,61 +148,6 @@ _armv7_neon_probe:
  	bx	lr
  .size	_armv7_neon_probe,.-_armv7_neon_probe
--
+ 
 -.global	_armv7_tick
 -.type	_armv7_tick,%function
 -_armv7_tick:
+-#ifdef	__APPLE__
+-	mrrc	p15,0,r0,r1,c14		@ CNTPCT
+-#else
 -	mrrc	p15,1,r0,r1,c14		@ CNTVCT
+-#endif
 -	bx	lr
 -.size	_armv7_tick,.-_armv7_tick
 -
 -.global	_armv8_aes_probe
 -.type	_armv8_aes_probe,%function
 -_armv8_aes_probe:
+-#if defined(__thumb2__) && !defined(__APPLE__)
+-	.byte	0xb0,0xff,0x00,0x03	@ aese.8	q0,q0
+-#else
 -	.byte	0x00,0x03,0xb0,0xf3	@ aese.8	q0,q0
+-#endif
 -	bx	lr
 -.size	_armv8_aes_probe,.-_armv8_aes_probe
 -
 -.global	_armv8_sha1_probe
 -.type	_armv8_sha1_probe,%function
 -_armv8_sha1_probe:
+-#if defined(__thumb2__) && !defined(__APPLE__)
+-	.byte	0x00,0xef,0x40,0x0c	@ sha1c.32	q0,q0,q0
+-#else
 -	.byte	0x40,0x0c,0x00,0xf2	@ sha1c.32	q0,q0,q0
+-#endif
 -	bx	lr
 -.size	_armv8_sha1_probe,.-_armv8_sha1_probe
 -
 -.global	_armv8_sha256_probe
 -.type	_armv8_sha256_probe,%function
 -_armv8_sha256_probe:
+-#if defined(__thumb2__) && !defined(__APPLE__)
+-	.byte	0x00,0xff,0x40,0x0c	@ sha256h.32	q0,q0,q0
+-#else
 -	.byte	0x40,0x0c,0x00,0xf3	@ sha256h.32	q0,q0,q0
+-#endif
 -	bx	lr
 -.size	_armv8_sha256_probe,.-_armv8_sha256_probe
 -.global	_armv8_pmull_probe
 -.type	_armv8_pmull_probe,%function
 -_armv8_pmull_probe:
+-#if defined(__thumb2__) && !defined(__APPLE__)
+-	.byte	0xa0,0xef,0x00,0x0e	@ vmull.p64	q0,d0,d0
+-#else
 -	.byte	0x00,0x0e,0xa0,0xf2	@ vmull.p64	q0,d0,d0
+-#endif
 -	bx	lr
 -.size	_armv8_pmull_probe,.-_armv8_pmull_probe
- #endif
- 
+-#endif
+-
  .global	OPENSSL_wipe_cpu
--- 
-2.13.1
-
+ .type	OPENSSL_wipe_cpu,%function
+ OPENSSL_wipe_cpu:
