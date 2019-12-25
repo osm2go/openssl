@@ -32,7 +32,11 @@ export CFLAGS
 build: patch-stamp build-stamp
 build-stamp:
 	dh_testdir
-	./Configure shared $(CONFARGS) debian-$(DEB_HOST_ARCH)
+	sed '/^use/s#5\.10\.0#5.8.0#' -i Configure
+	grep -ril 'better chomp' * | xargs sed 's{s[|/]\\R\$$[|/][|/];[[:space:]]*# \(The \)*[Bb]etter chomp.*{chomp;{' -i
+	# s|\R$|| <-- make sure the next line always finds a match
+	grep -rl '[[:space:]]*s[|/]\\R\$$[|/][|/];' * | xargs sed 's{s[|/]\\R\$$[|/][|/];$${chomp;{' -i
+	HASHBANGPERL=/usr/bin/perl ./Configure shared $(CONFARGS) debian-$(DEB_HOST_ARCH)
 	make depend
 	make -f Makefile all
 	ln -sf apps/openssl.pod crypto/crypto.pod ssl/ssl.pod doc/
@@ -43,6 +47,9 @@ clean: unpatch
 	dh_testroot
 	-rm -f build
 	# This Configure warns if the patches are not yet applied because it does not know about the Debian targets
+	sed '/^use/s#5\.10\.0#5.8.0#' -i Configure
+	grep -ril 'better chomp' * | xargs sed 's{s[|/]\\R\$$[|/][|/];[[:space:]]*# \(The \)*[Bb]etter chomp.*{chomp;{' -i
+	grep -rl '[[:space:]]*s[|/]\\R\$$[|/][|/];' * | xargs sed 's{s[|/]\\R\$$[|/][|/];$${chomp;{' -i
 	-./Configure $(CONFARGS) debian-$(DEB_HOST_ARCH)
 	[ ! -f Makefile ] || make -f Makefile  clean clean-shared
 	#-make -f Makefile  dclean
